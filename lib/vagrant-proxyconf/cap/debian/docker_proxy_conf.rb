@@ -29,7 +29,19 @@ module VagrantPlugins
               unless comm.test("diff #{tmp_file} #{dst_file}")
                 # update config and restart docker when config changed
                 comm.sudo("mv -f #{tmp_file} #{dst_file}")
-                comm.sudo('systemctl daemon-reload')
+                # identify which init system you are currently booting with
+                # ps -p1 | grep -q systemd && echo systemd || echo upstart
+                # see also https://wiki.ubuntu.com/SystemdForUpstartUsers
+                if comm.test("ps -p1 | grep -q systemd")
+                  comm.sudo("systemctl daemon-reload")
+                  comm.sudo("systemctl restart #{docker_command}")
+                elsif comm.test("ps -p1 | grep -v -q systemd")
+                  comm.sudo("initctl reload-configuration")
+                  comm.sudo("initctl reload #{docker_command}")
+                  comm.sudo("initctl restart #{docker_command}")
+                else
+                  comm.sudo("systemctl restart docker || systemctl restart docker.io || initctl restart docker || initctl restart docker.io || service docker restart || service docker.io restart || /etc/init.d/docker restart || /etc/init.d/docker.io restart || kill -HUP `pgrep -f 'docker'` || kill -HUP `pgrep -f 'docker.io'` ")
+                end
               end
               comm.sudo("rm -f #{tmp_file}")
             end
